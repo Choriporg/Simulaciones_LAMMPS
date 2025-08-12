@@ -1,0 +1,71 @@
+units           metal
+dimension       3
+boundary        p p p
+atom_style      full
+##restart         100000 restart_file_1 restart_file_2
+
+lattice 	sc 4.5  ### 
+region		bulto block -8 8 -8 8 -8 8
+create_box      3 bulto bond/types 1 angle/types 1 improper/types 1 extra/bond/per/atom 10  extra/angle/per/atom 10 extra/special/per/atom 10  extra/improper/per/atom 10 #### tipos de enlace, ángulo, torsiones impropias 
+
+bond_style      harmonic
+angle_style     harmonic
+improper_style  harmonic 
+
+molecule        1  NaNO3_mol_min.txt  ## Read NaNO3 molecule
+#create_atoms	0 region bulto mol 1 27236
+
+# Coeficientes de enlace, angulares e impropios
+bond_coeff      1 22.77 1.2676 # enlace 1, constante de fuerza K y longitud del enlace (N-O)
+angle_coeff     1 4.553  120  # ángulo 1, constante de fuerza k y ángulo de equilibrio (O-N-O)
+improper_coeff  1 2.6  0 
+
+mass            1 22.98977 # Na 
+mass            2 15.9994 # O 
+mass            3 14.0067  # N
+
+group           Na type 1
+group           O type 2
+group           N type 3
+
+##__Define como se calculan las interacciones entre átomos: van der waals a corta distancia(atracción/repuslión) y electrostáticas a larga #distancia (coul/long). 9 es el radio ##de corte.
+pair_style      lj/cut/coul/long 9
+pair_modify	mix arithmetic    ##sigma es promedio aritmetico, epsilon promedio geometrico
+
+#neigh_modify    one 5000
+
+#_Parámetros de las interacciones de LJ entre pares de átomos_A. Anagnostopoulos et al,Molecular dynamics simulation of solar salt (NaNO3-KNO3) mixtures.
+#pair_coeff     tipo tipo epsilon sigma
+
+pair_coeff	1 1 0.0066373 2.407
+pair_coeff      2 2 0.003469129 3.285
+pair_coeff      3 3 0.004017509 3.431
+
+##_Método para calcular interacciones de largo alcance en sistemas cargados(Particle-Particle Particle-Mesh). Las interacciones coulómbicas decaen como 1/r y no se pueden ##truncar sin afectar la precisión.
+kspace_style    pppm 1.0e-4
+kspace_modify gewald 0.1 # ajusta el kspace, valores pequeños mejoran el cálculo (más costosos)
+
+thermo_style    custom step atoms temp ke pe etotal press
+thermo 10 
+
+dump            mydump2 all custom 100 dump_custom id element x y z 
+dump_modify     mydump2 element Na O N first yes
+
+##_Coloca átomos de Na dentro de la caja de simulación
+##_se colocan 216 átomos, asegurando 0.5 A de distancia mínima y se realizan 2500 intentos para lograrlo.
+#fix           deposit all deposit 20480 0 1 126765456 region  bulto mol 1 near 0.5 attempt 25000  ## 191 segun mis primero calculos
+#run           25000
+
+label       loop
+variable    a loop 10
+fix           deposit all deposit 420 0 1 126765456 region  bulto mol 1 near 0.3 attempt 25000  ## 191 segun mis primero calculos
+run           420
+
+minimize     0 1.e-4 500 5000
+
+next        a
+jump        SELF loop
+
+
+
+write_data  data_NaNO3.data

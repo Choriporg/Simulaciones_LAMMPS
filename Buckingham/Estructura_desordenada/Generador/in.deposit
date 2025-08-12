@@ -1,0 +1,74 @@
+#-----------------------------------------INIT---------------------------------------
+units real
+boundary p p p
+log log.buck_deposit
+atom_style full
+
+lattice sc 4.5
+region bulto block -3 3 -3 3 -3 3
+create_box      3 bulto bond/types 1 angle/types 1 improper/types 1 extra/bond/per/atom 10  extra/angle/per/atom 10 extra/special/per/atom 10  extra/improper/per/atom 10 #### tipos de enlace, ángulo, torsiones impropias 
+
+#-----------------------------------BUCKINGHAM---------------------------------------
+pair_style buck/long/coul/long cut long 11.0
+bond_style harmonic
+angle_style harmonic
+dihedral_style none
+improper_style harmonic
+
+molecule 1 NaNO3_mol_min.txt
+
+kspace_style pppm 0.0001
+kspace_modify gewald 0.1 # ajusta el kspace, valores pequeños mejoran el cálculo (más costosos)
+
+pair_modify shift yes
+
+mass 1 22.98977 #Na
+mass 2 14.0067 #N
+mass 3 15.9994 #O
+
+group Na type 1
+group N type 2
+group O type 3
+
+bond_coeff 1 525 1.2676
+angle_coeff 1 105 120
+improper_coeff 1 60 0
+
+# 1 Na 2 N 3 O
+pair_coeff 1 1 9778.06 0.3170 24.18
+pair_coeff 1 2 18139.97 0.2884 79.149
+pair_coeff 1 3 24650.29 0.2727 79.193
+pair_coeff 2 2 33652.75 0.2646 259.079
+pair_coeff 2 3 45730.51 0.2513 259.22
+pair_coeff 3 3 62142.9 0.2392 259.367
+
+thermo_style custom step etotal ecoul ebond press lx ly lz vol temp 
+#thermo_modify flush yes lost ignore lost/bond ignore
+thermo 10
+
+##### Minimización
+minimize     0 1.0e-4 2000 20000
+
+
+dump mydump all  custom 1000 jayaraman_original.dump  id element x y z vx vy vz
+dump_modify     mydump element Na O N first yes
+
+##_Coloca átomos de Na dentro de la caja de simulación
+##_se colocan 216 átomos, asegurando 0.5 A de distancia mínima y se realizan 2500 intentos para lograrlo.
+#fix           deposit all deposit 20480 0 1 126765456 region  bulto mol 1 near 0.5 attempt 25000  ## 191 segun mis primero calculos
+#run           25000
+
+label       loop
+variable    a loop 10 
+
+#Por el loop es necesario dividir el Nº de moleculas en 10
+fix           deposit all deposit 21 0 1 126765456 region  bulto mol 1 near 0.3 attempt 25000  ## 191 segun mis primero calculos
+run           21
+
+minimize     0 1.e-4 500 5000
+
+next        a
+jump        SELF loop
+
+write_data data_buck.data
+

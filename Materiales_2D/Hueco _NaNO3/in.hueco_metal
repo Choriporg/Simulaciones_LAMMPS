@@ -1,0 +1,123 @@
+#-----------------------------------------INIT---------------------------------------
+
+units metal
+boundary p p p
+log log.hueco2D_metal
+atom_style full
+
+#-----------------------------------BUCKINGHAM---------------------------------------
+pair_style hybrid/overlay buck 15.0 coul/long 15.0
+bond_style harmonic
+angle_style harmonic
+dihedral_style none
+improper_style harmonic
+
+kspace_style pppm 0.0001
+pair_modify shift yes
+read_data data_buck_EQ_metal.data
+
+group Na type 1
+group N type 2
+group O type 3
+group NaNO3 union Na N O
+
+# 1 Na 2 N 3 O
+pair_coeff * * coul/long
+pair_coeff 1 1 buck 424.01692 0.3170 1.04854
+pair_coeff 1 2 buck 786.623751 0.2884 3.43226
+pair_coeff 1 3 buck 1068.93802 0.2727 3.434134
+pair_coeff 2 2 buck 1454.32173 0.2646 11.234732
+pair_coeff 2 3 buck 1983.06311 0.2513 11.24085
+pair_coeff 3 3 buck 2694.7719 0.2392 11.24722
+neighbor 2.0 bin
+#neigh_modify one 5000
+
+neigh_modify delay 5 check yes
+#replicate 6 4 2
+
+write_restart restart.NaNO3_supercell
+restart 100 NaNO3_restart_equil_1 NaNO3_restart_equil_2
+
+#--------------------------VARIABLES GLOBALES--------------------------------------------
+variable        temp equal temp
+variable        step equal step
+variable        time equal time
+variable        avogadro equal 6.02214e23
+variable        vol equal vol
+variable        volCM3 equal  (vol*1.0e-24)
+variable        eTotal equal etotal
+variable        NumAtoms equal count(all)
+variable        densidad equal ((84.994/5)*v_NumAtoms)/(v_avogadro*v_vol*1.0e-24)
+variable        etotalatom equal etotal/atoms
+compute         msd all msd
+variable	msd equal c_msd[4]
+
+#---------------------------- CALCULO DEL CENTRO Y HUECO --------------------------------
+variable xlo equal xlo
+variable xhi equal xhi
+variable ylo equal ylo
+variable yhi equal yhi
+variable zlo equal zlo
+variable zhi equal zhi
+variable espesor equal 6.0  # Semi-espesor del hueco (total = 12 Å)
+
+#Límites de la caja
+variable z_medio equal (zlo+zhi)/2
+
+variable zlo_hueco equal v_z_medio-v_espesor
+variable zhi_hueco equal v_z_medio+v_espesor
+
+# Creamos la región del hueco
+region hueco block INF INF INF INF ${zlo_hueco} ${zhi_hueco} units box
+
+# Eliminamos átomos en la zona del hueco
+delete_atoms region hueco mol yes
+
+run 0
+
+#region muro_bajo block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo_box} ${zlo_hueco} units box
+#region muro_alto  block ${xlo} ${xhi} ${ylo} ${yhi} ${zhi_hueco} ${zhi_box} units box
+
+#fix muro_bajo all wall/region muro_bajo lj126 1.0 3.0 10.0
+#fix muro_alto all wall/region muro_alto lj126 1.0 3.0 10.0
+#------------------------CONVERSIÓN DE REAL A SI-----------------------------------------------
+variable    kB equal 1.3806504e-23    # [J/K] Boltzmann
+variable    atm2Pa equal 101325.0
+variable    A2m equal 1.0e-10
+variable    fs2s equal 1.0e-15
+variable    convert equal ${atm2Pa}*${atm2Pa}*${fs2s}*${A2m}*${A2m}*${A2m}
+
+compute         Stress all stress/atom NULL virial
+compute         pe all pe/atom
+compute         ke all ke/atom
+
+
+#### ---------------------------------------------OUTPUT FILES---------------------------------------------------
+#fix             impDensity all print 1000 "time: ${time} density:  ${densidad}" file densityTime.data screen no
+#fix             impVol all print 1000 "time: ${time} vol: ${volCM3}" file timeVol.data screen no
+#fix             impEtotal all print 1000 "time: ${time} Total_Energy: ${eTotal}" file totalE.data screen no
+#fix		impMSD all print 1000 "time: ${time} MSD: ${msd}" file stepMSD.data screen no
+#fix		impTempStep all print 1000 "time: ${time} temperature: ${temp}" file tempTime.data screen no
+#fix		impDensityTemp all print 1000 "temp: ${temp} density: ${densidad}" file densityTemp.data screen no
+
+thermo_style custom step etotal ecoul ebond press lx ly lz vol temp 
+#thermo_modify flush yes lost ignore lost/bond ignore
+thermo 1000
+
+##### Minimización
+minimize     0 1.0e-4 2000 20000
+reset_timestep 0
+
+dump mydump all  custom 1000 buck_EQ_metal.dump  id element x y z vx vy vz
+dump_modify     mydump element Na O N first yes
+
+timestep        0.001  # 1 fs
+
+#---------------------------------Equilibrio inicial---------------------------------------------
+reset_atoms id
+velocity        all create 583.0 4193182 rot yes mom yes dist gaussian
+fix nvt all nvt temp 583.0 583.0 $(100*dt)
+run 30000
+unfix nvt
+
+write_data data_buck_hueco_metal.data

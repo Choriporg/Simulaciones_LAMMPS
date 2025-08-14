@@ -1,0 +1,40 @@
+#--------------------INIT----------------------------
+units metal
+boundary p p p
+log log.grafeno_initial_sim
+atom_style full
+read_data grafeno_init.data
+
+
+neighbor        2.0 bin
+neigh_modify    delay 0 every 1 check yes
+
+#------------------POTENTIAL-------------------------
+pair_style rebo
+pair_coeff * * CH.rebo C C C C
+
+group C type 1 #Para evitar conflictos con la sal fundida.
+
+set type 1 type 4
+
+dump mydump all  custom 1000 graphene.dump  id element x y z vx vy vz
+dump_modify     mydump element C NULL NULL C
+neigh_modify delay 0 every 1 check yes
+min_style cg
+minimize 1.0e-6 1.0e-8 2000 20000
+
+write_data grafeno_no_MD.data
+timestep       0.0005  # 1 fs
+
+thermo 100
+
+
+#---------------------------------Equilibrio inicial---------------------------------------------
+velocity        all create 50.0 4193182 rot yes mom yes dist gaussian
+fix nvt all nvt temp 50.0 300.0 $(100*dt)
+run 300000
+unfix nvt
+
+
+
+write_data grafeno_300K.data
